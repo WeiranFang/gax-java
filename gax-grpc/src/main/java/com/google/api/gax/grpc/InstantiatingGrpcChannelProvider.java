@@ -66,6 +66,9 @@ import org.threeten.bp.Duration;
  */
 @InternalExtensionOnly
 public final class InstantiatingGrpcChannelProvider implements TransportChannelProvider {
+  protected static final long defaultKeepAliveTimeSeconds = 3600;
+  protected static final long defaultKeepAliveTimeoutSeconds = 20;
+
   private final int processorCount;
   private final ExecutorProvider executorProvider;
   private final HeaderProvider headerProvider;
@@ -213,6 +216,10 @@ public final class InstantiatingGrpcChannelProvider implements TransportChannelP
     // service account.
     if (isDirectPathEnabled() && credentials instanceof ComputeEngineCredentials) {
       builder = ComputeEngineChannelBuilder.forAddress(serviceAddress, port);
+      if (keepAliveTime == null && keepAliveTimeout == null) {
+        builder.keepAliveTime(defaultKeepAliveTimeSeconds, TimeUnit.SECONDS);
+        builder.keepAliveTimeout(defaultKeepAliveTimeoutSeconds, TimeUnit.SECONDS);
+      }
     } else {
       builder = ManagedChannelBuilder.forAddress(serviceAddress, port);
     }
