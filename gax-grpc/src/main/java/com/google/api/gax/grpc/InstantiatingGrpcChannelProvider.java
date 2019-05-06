@@ -68,6 +68,7 @@ import org.threeten.bp.Duration;
 public final class InstantiatingGrpcChannelProvider implements TransportChannelProvider {
   protected static final long defaultKeepAliveTimeSeconds = 3600;
   protected static final long defaultKeepAliveTimeoutSeconds = 20;
+  protected static final String DIRECT_PATH_ENV_VAR = "GOOGLE_CLOUD_ENABLE_DIRECT_PATH";
 
   private final int processorCount;
   private final ExecutorProvider executorProvider;
@@ -192,8 +193,13 @@ public final class InstantiatingGrpcChannelProvider implements TransportChannelP
     return GrpcTransportChannel.create(outerChannel);
   }
 
-  private boolean isDirectPathEnabled() {
-    return Boolean.parseBoolean(System.getProperty("ENABLE_DIRECTPATH"));
+  private boolean isDirectPathEnabled(String serviceAddress) {
+    String whiteList = System.getProperty(DIRECT_PATH_ENV_VAR);
+    if (whiteList == null) return false;
+    for (String service : whiteList.split(",")) {
+      if (!service.isEmpty() && serviceAddress.contains(service)) return true;
+    }
+    return false;
   }
 
   private ManagedChannel createSingleChannel() throws IOException {
@@ -214,7 +220,7 @@ public final class InstantiatingGrpcChannelProvider implements TransportChannelP
 
     // TODO(weiranf): Add a new API in ComputeEngineCredentials to check whether it's using default
     // service account.
-    if (isDirectPathEnabled() && credentials instanceof ComputeEngineCredentials) {
+    if (isDirectPathEnabled(serviceAddress) && credentials instanceof ComputeEngineCredentials) {
       builder = ComputeEngineChannelBuilder.forAddress(serviceAddress, port);
       if (keepAliveTime == null && keepAliveTimeout == null) {
         builder.keepAliveTime(defaultKeepAliveTimeSeconds, TimeUnit.SECONDS);
