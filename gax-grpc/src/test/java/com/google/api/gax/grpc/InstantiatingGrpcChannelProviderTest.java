@@ -239,4 +239,14 @@ public class InstantiatingGrpcChannelProviderTest {
 
     provider.getTransportChannel().shutdownNow();
   }
+
+  @Test
+  public void testEpollAvailable() throws Exception {
+    boolean epollAvailable =
+        (Boolean)
+            Class.forName("io.netty.channel.epoll.Epoll")
+                .getDeclaredMethod("isAvailable")
+                .invoke(null);
+    assertThat(epollAvailable).isTrue();
+  }
 }
