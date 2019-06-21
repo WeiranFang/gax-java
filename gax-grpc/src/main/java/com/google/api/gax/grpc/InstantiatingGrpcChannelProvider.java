@@ -212,6 +212,8 @@ public final class InstantiatingGrpcChannelProvider implements TransportChannelP
         new GrpcHeaderInterceptor(headerProvider.getHeaders());
     GrpcMetadataHandlerInterceptor metadataHandlerInterceptor =
         new GrpcMetadataHandlerInterceptor();
+    GrpcRequestMarshallerInterceptor requestMarshallerInterceptor =
+        new GrpcRequestMarshallerInterceptor();
 
     int colon = endpoint.indexOf(':');
     if (colon < 0) {
@@ -264,6 +266,8 @@ public final class InstantiatingGrpcChannelProvider implements TransportChannelP
     if (channelConfigurator != null) {
       builder = channelConfigurator.apply(builder);
     }
+
+    builder.intercept(requestMarshallerInterceptor);
 
     return builder.build();
   }
