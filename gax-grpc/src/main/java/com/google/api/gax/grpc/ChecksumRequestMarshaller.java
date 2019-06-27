@@ -31,14 +31,17 @@ package com.google.api.gax.grpc;
 
 import com.google.protobuf.CodedOutputStream;
 import io.grpc.MethodDescriptor.Marshaller;
+import io.grpc.internal.IoUtils;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import java.util.zip.CRC32;
 import java.util.zip.Checksum;
 
 public class ChecksumRequestMarshaller<ReqT> implements Marshaller<ReqT> {
-
+  private static final Logger logger = Logger.getLogger(ChecksumRequestMarshaller.class.getName());
   private Marshaller<ReqT> delegate;
   private final int CHECKSUM_FIELD_NUMBER = 2047;
   private final int CHECKSUM_OVERHEAD_BYTES = 6;
@@ -50,28 +53,42 @@ public class ChecksumRequestMarshaller<ReqT> implements Marshaller<ReqT> {
   @Override
   public InputStream stream(ReqT value) {
     InputStream stream = delegate.stream(value);
-    byte[] resultBytes = null;
+    byte[] payload = null;
     try {
+      payload = IoUtils.toByteArray(stream);
+      // logger.info("original payload bytes: " + printBytes(payload));
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+
+    if (payload.length == 0) {
+      return null;
+    }
+
+    try {
+      logger.info("Calculating checksum on payload...");
       // reserve CHECKSUM_OVERHEAD_BYTES bytes for tag+checksum
-      resultBytes = new byte[CHECKSUM_OVERHEAD_BYTES + stream.available()];
-      stream.read(
-          resultBytes, CHECKSUM_OVERHEAD_BYTES, resultBytes.length - CHECKSUM_OVERHEAD_BYTES);
+      byte[] resultBytes = new byte[CHECKSUM_OVERHEAD_BYTES + payload.length];
 
       // calculate crc32 checksum for payload
-      Checksum checksum = new CRC32();
-      checksum.update(
-          resultBytes, CHECKSUM_FIELD_NUMBER, resultBytes.length - CHECKSUM_OVERHEAD_BYTES);
+      Checksum checksum = new Crc32c();
+      checksum.update(payload, 0, payload.length);
 
       // prepend tag+checksum to payload bytes.
       CodedOutputStream codedOutputStream =
           CodedOutputStream.newInstance(resultBytes, 0, CHECKSUM_OVERHEAD_BYTES);
-      codedOutputStream.writeInt32(CHECKSUM_FIELD_NUMBER, (int) checksum.getValue());
+      codedOutputStream.writeFixed32(CHECKSUM_FIELD_NUMBER, (int) checksum.getValue());
 
+      // copy payload bytes to result bytes.
+      System.arraycopy(payload, 0, resultBytes, CHECKSUM_OVERHEAD_BYTES, payload.length);
+      // logger.info("payload bytes after checksum: " + printBytes(resultBytes));
+      logger.info("Checksum overhead prepended to request payload.");
       return new ByteArrayInputStream(resultBytes);
     } catch (IOException e) {
-      e.printStackTrace();
+      // checksum process failed, use original payload pytes.
+      logger.log(Level.WARNING, "Checksum calculation failed, forwarding original payload.", e);
+      return new ByteArrayInputStream(payload);
     }
-    return stream;
   }
 
   @Override
